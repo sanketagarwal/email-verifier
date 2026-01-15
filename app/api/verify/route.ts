@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateEmailBatch, EmailValidationResult } from '@/lib/email-validator';
+import { validateEmailBatch } from '@/lib/email-validator';
 
-export const runtime = 'edge';
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
@@ -48,9 +47,17 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Verification error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Internal server error during verification' },
+      { error: `Verification failed: ${errorMessage}` },
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ 
+    status: 'ok', 
+    message: 'Email verification API. Send POST request with { emails: string[] }' 
+  });
 }
