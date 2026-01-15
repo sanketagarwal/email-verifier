@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Limit batch size to prevent timeout
-    const maxBatchSize = 500;
+    // Limit batch size to prevent timeout (increased with domain caching optimization)
+    const maxBatchSize = 5000;
     if (emails.length > maxBatchSize) {
       return NextResponse.json(
         { error: `Batch too large. Maximum ${maxBatchSize} emails per request.` },

@@ -101,7 +101,8 @@ export default function Home() {
       return;
     }
 
-    const batchSize = 500;
+    // Larger batch size since we now cache MX lookups by domain
+    const batchSize = 2000;
     const batches = [];
     for (let i = 0; i < emails.length; i += batchSize) {
       batches.push(emails.slice(i, i + batchSize));
@@ -119,11 +120,17 @@ export default function Home() {
 
     try {
       for (let i = 0; i < batches.length; i++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 second timeout per batch
+        
         const response = await fetch('/api/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ emails: batches[i] }),
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -133,6 +140,8 @@ export default function Home() {
         const data = await response.json();
         allResults.push(...data.results);
 
+        // Update progress after each batch
+        setResults([...allResults]);
         setProcessing(prev => ({
           ...prev,
           progress: Math.min((i + 1) * batchSize, emails.length),
@@ -149,8 +158,22 @@ export default function Home() {
       });
       setProcessing(prev => ({ ...prev, status: 'complete' }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed');
-      setProcessing(prev => ({ ...prev, status: 'error' }));
+      // If we have partial results, show them
+      if (allResults.length > 0) {
+        setResults(allResults);
+        setSummary({
+          total: allResults.length,
+          valid: allResults.filter(r => r.status === 'valid').length,
+          invalid: allResults.filter(r => r.status === 'invalid').length,
+          risky: allResults.filter(r => r.status === 'risky').length,
+        });
+        setProcessing(prev => ({ ...prev, status: 'complete' }));
+        setError(`Completed ${allResults.length} of ${emails.length} emails. Some batches timed out.`);
+      } else {
+        const message = err instanceof Error ? err.message : 'Verification failed';
+        setError(message === 'The operation was aborted.' ? 'Request timed out. Try with fewer emails.' : message);
+        setProcessing(prev => ({ ...prev, status: 'error' }));
+      }
     }
   };
 
